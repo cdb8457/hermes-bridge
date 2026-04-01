@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  hermes-ui:
+    image: ghcr.io/cdb8457/hermes-bridge:latest
+    ports:
+      - "6001:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  default:
+    name: hermes-bridge
