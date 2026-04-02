@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Header } from './components/Header/Header'
 import { SessionList } from './components/Sidebar/SessionList'
 import { CronPanel } from './components/Sidebar/CronPanel'
 import { ChatPanel } from './components/Chat/ChatPanel'
+import { MissionControl, type AgentStatus } from './components/Dashboard/MissionControl'
 import { useChatStore } from './stores/chatStore'
 import { useSessionStore } from './stores/sessionStore'
 import { useVoiceOutput } from './hooks/useVoiceOutput'
@@ -16,13 +17,24 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string>(() => makeSessionId())
   const [connected, setConnected] = useState(false)
   const [cronOpen, setCronOpen] = useState(false)
+  const [dashboardOpen, setDashboardOpen] = useState(false)
   const [readingMessageId] = useState<string | null>(null)
 
   const clearMessages = useChatStore((s) => s.clearMessages)
   const loadMessages = useChatStore((s) => s.loadMessages)
   const messages = useChatStore((s) => s.messages)
+  const isStreaming = useChatStore((s) => s.isStreaming)
   const { addSession, updateSession, setActiveSession } = useSessionStore()
   const { enabled: voiceEnabled, speak, toggle: toggleVoice } = useVoiceOutput()
+
+  // Derive agent status for Mission Control
+  const agentStatus = useMemo((): AgentStatus => {
+    if (!isStreaming) return 'idle'
+    const lastMsg = messages[messages.length - 1]
+    if (lastMsg?.toolCalls?.some((tc) => tc.running)) return 'running'
+    if (lastMsg?.thinking && lastMsg.thinking.length > 0 && !lastMsg.content) return 'thinking'
+    return 'streaming'
+  }, [isStreaming, messages])
 
   const handleNewChat = useCallback(() => {
     const newId = makeSessionId()
@@ -95,6 +107,8 @@ export default function App() {
         onVoiceToggle={toggleVoice}
         onCronToggle={() => setCronOpen((v) => !v)}
         cronOpen={cronOpen}
+        onDashboardToggle={() => setDashboardOpen((v) => !v)}
+        dashboardOpen={dashboardOpen}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -117,6 +131,14 @@ export default function App() {
 
         {cronOpen && (
           <CronPanel onClose={() => setCronOpen(false)} />
+        )}
+
+        {dashboardOpen && (
+          <MissionControl
+            onClose={() => setDashboardOpen(false)}
+            sessionId={sessionId}
+            agentStatus={agentStatus}
+          />
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore, type Message } from '../stores/chatStore'
+import { useActivityStore } from '../stores/activityStore'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -28,6 +29,8 @@ export function useHermesChat(sessionId: string | null) {
     setStreaming,
     setMessageStreaming,
   } = useChatStore()
+
+  const pushEvent = useActivityStore((s) => s.pushEvent)
 
   // Ensure an assistant message exists, return its id
   const ensureAssistantMsg = useCallback(() => {
@@ -83,6 +86,7 @@ export function useHermesChat(sessionId: string | null) {
           // Pre-response internal monologue — accumulate into thinking block
           const id = ensureAssistantMsg()
           appendThinking(id, data.content ?? '')
+          pushEvent({ type: 'thinking', label: 'thinking', detail: data.content, timestamp: Date.now(), sessionId: sessionId ?? '' })
 
         } else if (data.type === 'token') {
           const id = ensureAssistantMsg()
@@ -96,6 +100,7 @@ export function useHermesChat(sessionId: string | null) {
             input: data.input ?? {},
             running: true,
           })
+          pushEvent({ type: 'tool_call', label: data.name ?? 'unknown', detail: JSON.stringify(data.input ?? {}), timestamp: Date.now(), sessionId: sessionId ?? '' })
 
         } else if (data.type === 'tool_result') {
           const msgId = currentMsgIdRef.current
@@ -105,6 +110,7 @@ export function useHermesChat(sessionId: string | null) {
             const pending = msg?.toolCalls?.find((tc) => tc.running)
             if (pending) {
               updateToolResult(msgId, pending.id, data.content ?? '')
+              pushEvent({ type: 'tool_result', label: `${pending.name} result`, timestamp: Date.now(), sessionId: sessionId ?? '' })
             }
           }
 
@@ -114,6 +120,7 @@ export function useHermesChat(sessionId: string | null) {
           }
           currentMsgIdRef.current = null
           setStreaming(false)
+          pushEvent({ type: 'response', label: 'Response complete', timestamp: Date.now(), sessionId: sessionId ?? '' })
 
         } else if (data.type === 'error') {
           if (currentMsgIdRef.current) {
@@ -151,6 +158,7 @@ export function useHermesChat(sessionId: string | null) {
     updateToolResult,
     setStreaming,
     setMessageStreaming,
+    pushEvent,
   ])
 
   useEffect(() => {
@@ -176,6 +184,7 @@ export function useHermesChat(sessionId: string | null) {
       }
       addMessage(userMsg)
       currentMsgIdRef.current = null
+      pushEvent({ type: 'user_message', label: content.slice(0, 60) + (content.length > 60 ? '…' : ''), timestamp: Date.now(), sessionId: sessionId ?? '' })
 
       wsRef.current.send(JSON.stringify({ content, files }))
     },

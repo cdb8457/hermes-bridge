@@ -1,4 +1,4 @@
-import { Settings, Volume2, VolumeX, Clock } from 'lucide-react'
+import { Settings, Volume2, VolumeX, Clock, LayoutDashboard } from 'lucide-react'
 
 interface HeaderProps {
   connected: boolean
@@ -7,6 +7,8 @@ interface HeaderProps {
   onVoiceToggle?: () => void
   onCronToggle?: () => void
   cronOpen?: boolean
+  onDashboardToggle?: () => void
+  dashboardOpen?: boolean
 }
 
 export function Header({
@@ -16,6 +18,8 @@ export function Header({
   onVoiceToggle,
   onCronToggle,
   cronOpen = false,
+  onDashboardToggle,
+  dashboardOpen = false,
 }: HeaderProps) {
   return (
     <header
@@ -112,6 +116,33 @@ export function Header({
           }}
         >
           <Clock size={15} />
+        </button>
+
+        {/* Dashboard toggle */}
+        <button
+          onClick={onDashboardToggle}
+          title="Mission Control"
+          style={{
+            background: dashboardOpen ? 'var(--accent-gold-glow)' : 'none',
+            border: dashboardOpen ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: dashboardOpen ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!dashboardOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            if (!dashboardOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
+        >
+          <LayoutDashboard size={15} />
         </button>
 
         {/* Connection status */}
