@@ -65,6 +65,54 @@ Before speaking, strip:
 
 ---
 
+## Future: Voice Settings (Phase 4 or later)
+
+### Tier 1 — Browser Voice Picker (low effort, high value)
+Let the user pick from all voices the browser has installed.
+Different OSes have different voices — Windows has a lot, macOS has
+high-quality Siri voices, Chrome adds Google voices.
+
+```
+Settings modal → Voice section:
+  Voice: [dropdown — lists all window.speechSynthesis.getVoices()]
+  Speed: [slider — 0.75x to 2.0x]
+  Pitch: [slider — 0.5 to 2.0]
+  Preview: [button — speaks a test sentence]
+```
+
+Store selection in localStorage so it persists across sessions.
+
+### Tier 2 — ElevenLabs Custom Voice (medium effort, paid)
+ElevenLabs API lets you clone a voice from a 1-minute audio sample
+or pick from 1000+ studio voices. Much higher quality than browser TTS.
+
+- User provides ElevenLabs API key in settings
+- Select a voice ID from their library or upload a voice clone
+- Bridge streams ElevenLabs audio back to the frontend
+- Cost: ~$5/month for casual use
+
+Integration approach:
+  - Bridge gets the completed response text
+  - POSTs to `api.elevenlabs.io/v1/text-to-speech/{voice_id}`
+  - Streams MP3 audio back to frontend via a `/tts` endpoint
+  - Frontend plays with Web Audio API
+
+### Tier 3 — Local TTS (no cost, higher effort)
+Run a local TTS model inside the Webtop container.
+Options: Kokoro (very fast, high quality), Piper (lightweight).
+Zero API cost, works offline, fully private.
+
+```bash
+# Kokoro — best quality local option
+pip install kokoro
+# Piper — fastest, lowest resource use
+pip install piper-tts
+```
+
+Bridge adds a `/tts` endpoint that runs the local model and returns audio.
+
+---
+
 ## Feature 2: Session Branching
 
 ### What It Is
