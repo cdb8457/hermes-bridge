@@ -7,12 +7,14 @@ export interface ToolCall {
   name: string
   input: Record<string, unknown>
   result?: string
+  running?: boolean
 }
 
 export interface Message {
   id: string
   role: MessageRole
   content: string
+  thinking?: string[]   // internal monologue lines before the response
   toolCalls?: ToolCall[]
   files?: string[]
   streaming?: boolean
@@ -25,8 +27,10 @@ interface ChatState {
   pendingFiles: string[]
   addMessage: (msg: Message) => void
   appendToken: (id: string, token: string) => void
+  appendThinking: (id: string, line: string) => void
   addToolCall: (msgId: string, toolCall: ToolCall) => void
   updateToolResult: (msgId: string, toolCallId: string, result: string) => void
+  setToolRunning: (msgId: string, toolCallId: string, running: boolean) => void
   setStreaming: (v: boolean) => void
   setMessageStreaming: (id: string, v: boolean) => void
   clearMessages: () => void
@@ -51,6 +55,15 @@ export const useChatStore = create<ChatState>((set) => ({
       ),
     })),
 
+  appendThinking: (id, line) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === id
+          ? { ...m, thinking: [...(m.thinking ?? []), line] }
+          : m
+      ),
+    })),
+
   addToolCall: (msgId, toolCall) =>
     set((s) => ({
       messages: s.messages.map((m) =>
@@ -67,7 +80,21 @@ export const useChatStore = create<ChatState>((set) => ({
           ? {
               ...m,
               toolCalls: m.toolCalls?.map((tc) =>
-                tc.id === toolCallId ? { ...tc, result } : tc
+                tc.id === toolCallId ? { ...tc, result, running: false } : tc
+              ),
+            }
+          : m
+      ),
+    })),
+
+  setToolRunning: (msgId, toolCallId, running) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === msgId
+          ? {
+              ...m,
+              toolCalls: m.toolCalls?.map((tc) =>
+                tc.id === toolCallId ? { ...tc, running } : tc
               ),
             }
           : m

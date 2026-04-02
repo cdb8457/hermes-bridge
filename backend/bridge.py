@@ -1,7 +1,13 @@
 """
 Hermes Bridge — FastAPI WebSocket/REST bridge for Hermes CLI
 Runs inside Webtop container on port 8642.
-Wraps `hermes chat -q` subprocess and streams output to WebSocket clients.
+
+Phase 2: Full output parser — classifies every line from hermes stdout into:
+  thinking  → pre-response internal monologue
+  token     → actual response content
+  tool_call → tool being invoked
+  tool_result → tool output
+  done      → response complete
 """
 
 import asyncio
@@ -33,11 +39,73 @@ session_map: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
-# Output parsing helpers
+# Output parser
 # ---------------------------------------------------------------------------
 
+# Lines containing these are pure decoration — skip entirely
+SKIP_PATTERNS = [
+    r"Hermes Agent v\d",
+    r"Available Tools",
+    r"Available Skills",
+    r"Resume this session",
+    r"Session:\s+\S",
+    r"Duration:",
+    r"Messages:\s+\d",
+    r"Initializing agent",
+    r"^\s*Query:",
+    r"commits behind",
+    r"^\s*[╭╮╰╯]",          # box border lines
+    r"^[\s─═]+$",            # horizontal rules
+    r"^\s*\(and \d+ more",
+    r"gemini|gpt|claude|llama",   # model name lines in splash
+    r"/config",
+    r"^Nous$",
+    r"^Research$",
+]
+
+# Tool call detection — Hermes prints these when invoking a tool
+TOOL_CALL_PATTERNS = [
+    r"^\s*(?:Using|Calling|Running|Invoking) tool[:\s]+(\w+)",
+    r"^\s*⚙\s+(\w[\w_.-]+)\(",
+    r"^\s*Tool:\s+(\w+)",
+    r"^\s*→\s+(\w[\w_.-]+)\s*\(",
+]
+
+# Tool result detection
+TOOL_RESULT_PATTERNS = [
+    r"^\s*(?:Tool result|Result)[:\s]",
+    r"^\s*←\s+",
+    r"^\s*Output[:\s]",
+]
+
+
+def should_skip(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return True
+    for pat in SKIP_PATTERNS:
+        if re.search(pat, stripped, re.IGNORECASE):
+            return True
+    return False
+
+
+def detect_tool_call(line: str) -> Optional[str]:
+    """Return tool name if line is a tool call, else None."""
+    for pat in TOOL_CALL_PATTERNS:
+        m = re.search(pat, line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def detect_tool_result(line: str) -> bool:
+    for pat in TOOL_RESULT_PATTERNS:
+        if re.search(pat, line):
+            return True
+    return False
+
+
 def extract_hermes_session_id(text: str) -> Optional[str]:
-    """Pull Hermes session ID out of CLI output."""
     m = re.search(r"hermes --resume (\S+)", text)
     if m:
         return m.group(1)
@@ -47,12 +115,9 @@ def extract_hermes_session_id(text: str) -> Optional[str]:
     return None
 
 
-def is_response_start(line: str) -> bool:
-    return "⚕ Hermes" in line and "─" in line
-
-
-def is_response_end(line: str) -> bool:
-    return line.strip().startswith("╰")
+def strip_box_chars(line: str) -> str:
+    """Remove leading box-drawing characters from content lines."""
+    return line.strip().lstrip("│╎┃").strip()
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +142,7 @@ async def websocket_chat(websocket: WebSocket, frontend_session_id: str):
             raw = await websocket.receive_text()
             payload = json.loads(raw)
 
-            # Ignore keepalive pings from the frontend
+            # Keepalive ping — ignore
             if payload.get("type") == "ping":
                 continue
 
@@ -106,34 +171,105 @@ async def websocket_chat(websocket: WebSocket, frontend_session_id: str):
                 stderr=asyncio.subprocess.STDOUT,
             )
 
-            in_response = False
+            # Parser state
+            in_response = False          # inside ╭─ ⚕ Hermes ─╮ box
+            in_tool_result = False       # collecting tool result lines
+            tool_result_lines: list[str] = []
+            current_tool_id: Optional[str] = None
             full_output: list[str] = []
+            tool_counter = 0
 
             assert proc.stdout is not None
+
             async for raw_line in proc.stdout:
                 line = raw_line.decode("utf-8", errors="replace")
                 full_output.append(line)
+                stripped = line.strip()
 
-                if is_response_start(line):
+                # ── Response box start ───────────────────────────────────
+                if "⚕ Hermes" in line and "─" in line:
                     in_response = True
+                    in_tool_result = False
                     continue
 
-                if in_response and is_response_end(line):
+                # ── Response box end ─────────────────────────────────────
+                if in_response and stripped.startswith("╰"):
                     in_response = False
                     continue
 
+                # ── Inside response box → stream as tokens ───────────────
                 if in_response:
-                    content = line.rstrip("\n")
-                    # Skip empty decorative lines
-                    if content.strip():
+                    content = strip_box_chars(line)
+                    if content:
                         await websocket.send_text(
                             json.dumps({"type": "token", "content": content + "\n"})
                         )
+                    continue
+
+                # ── Skip pure decoration ─────────────────────────────────
+                if should_skip(line):
+                    continue
+
+                # ── Tool result collection ───────────────────────────────
+                if in_tool_result:
+                    # Empty line or next tool call ends the result block
+                    if not stripped or detect_tool_call(line):
+                        result_text = "\n".join(tool_result_lines).strip()
+                        if result_text and current_tool_id:
+                            await websocket.send_text(json.dumps({
+                                "type": "tool_result",
+                                "tool_call_id": current_tool_id,
+                                "content": result_text,
+                            }))
+                        in_tool_result = False
+                        tool_result_lines = []
+                        current_tool_id = None
+                        # Fall through to check if this is a new tool call
+
+                    else:
+                        tool_result_lines.append(stripped)
+                        continue
+
+                # ── Tool result start ────────────────────────────────────
+                if detect_tool_result(line):
+                    in_tool_result = True
+                    tool_result_lines = []
+                    continue
+
+                # ── Tool call ────────────────────────────────────────────
+                tool_name = detect_tool_call(line)
+                if tool_name:
+                    tool_counter += 1
+                    current_tool_id = f"tc_{tool_counter}"
+
+                    # Best-effort: try to extract JSON args from the line
+                    input_dict: dict = {}
+                    json_match = re.search(r"\{.*\}", line)
+                    if json_match:
+                        try:
+                            input_dict = json.loads(json_match.group())
+                        except Exception:
+                            input_dict = {"raw": json_match.group()}
+
+                    await websocket.send_text(json.dumps({
+                        "type": "tool_call",
+                        "tool_call_id": current_tool_id,
+                        "name": tool_name,
+                        "input": input_dict,
+                    }))
+                    continue
+
+                # ── Everything else before response box → thinking ───────
+                content = strip_box_chars(line)
+                if content and len(content) > 2:
+                    await websocket.send_text(
+                        json.dumps({"type": "thinking", "content": content})
+                    )
 
             await proc.wait()
             await websocket.send_text(json.dumps({"type": "done"}))
 
-            # Persist Hermes session ID for future turns
+            # Store Hermes session ID for conversation continuity
             h_id = extract_hermes_session_id("".join(full_output))
             if h_id:
                 session_map[frontend_session_id] = h_id
@@ -150,7 +286,7 @@ async def websocket_chat(websocket: WebSocket, frontend_session_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Sessions REST
+# Sessions
 # ---------------------------------------------------------------------------
 
 @app.get("/sessions")
@@ -161,15 +297,11 @@ async def list_sessions():
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, _ = await proc.communicate()
-    output = stdout.decode(errors="replace").strip()
-
     sessions = []
-    for line in output.splitlines():
+    for line in stdout.decode(errors="replace").splitlines():
         line = line.strip()
-        if not line or line.startswith("─") or line.startswith("No sessions"):
+        if not line or line.startswith("─") or "No sessions" in line:
             continue
-        # hermes sessions list format: "ID  |  title  |  date"
-        # Attempt to parse — fall back to using the whole line as ID/title
         parts = re.split(r"\s{2,}|\t", line, maxsplit=2)
         sid = parts[0].strip() if parts else line
         title = parts[1].strip() if len(parts) > 1 else sid
@@ -179,20 +311,12 @@ async def list_sessions():
             "created_at": int(time.time()),
             "updated_at": int(time.time()),
         })
-
     return sessions
 
 
 @app.get("/sessions/{session_id}")
 async def get_session(session_id: str):
     h_id = session_map.get(session_id, session_id)
-    proc = await asyncio.create_subprocess_exec(
-        "hermes", "sessions", "export", h_id,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    # Export may return JSON or text — return minimal structure for now
     return {"id": session_id, "title": session_id, "messages": []}
 
 
@@ -226,7 +350,6 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 
-# Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 

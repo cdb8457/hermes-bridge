@@ -19,48 +19,46 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
         flexShrink: 0,
       }}
     >
-      {/* Left: wordmark */}
+      {/* Left: wordmark — gold, matching CLI */}
       <span
         style={{
-          color: 'var(--accent-cyan)',
+          color: 'var(--accent-gold)',
           fontWeight: 700,
-          fontSize: 16,
+          fontSize: 15,
           letterSpacing: '-0.3px',
+          fontFamily: "'Geist Mono', monospace",
         }}
       >
-        Hermes Bridge
+        ⚕ Hermes Bridge
       </span>
 
-      {/* Center: model */}
+      {/* Center: model name — cyan, matching CLI status bar */}
       <span
         style={{
           flex: 1,
           textAlign: 'center',
-          color: 'var(--text-muted)',
-          fontSize: 13,
+          color: 'var(--accent-cyan)',
+          fontSize: 12,
           fontFamily: "'Geist Mono', monospace",
+          opacity: 0.9,
         }}
       >
         {model}
       </span>
 
-      {/* Right: status + settings */}
+      {/* Right: status dot + settings */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div
             style={{
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               borderRadius: '50%',
-              background: connected
-                ? 'var(--status-success)'
-                : 'var(--status-error)',
-              boxShadow: connected
-                ? '0 0 6px var(--status-success)'
-                : 'none',
+              background: connected ? 'var(--status-success)' : 'var(--status-error)',
+              boxShadow: connected ? '0 0 6px var(--status-success)' : 'none',
             }}
           />
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, fontFamily: "'Geist Mono', monospace" }}>
             {connected ? 'connected' : 'disconnected'}
           </span>
         </div>
@@ -73,10 +71,17 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
             padding: 4,
             display: 'flex',
             alignItems: 'center',
+            transition: 'color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-gold)'
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
           }}
           title="Settings"
         >
-          <Settings size={16} />
+          <Settings size={15} />
         </button>
       </div>
     </header>

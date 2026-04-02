@@ -22,11 +22,32 @@ export function useHermesChat(sessionId: string | null) {
   const {
     addMessage,
     appendToken,
+    appendThinking,
     addToolCall,
     updateToolResult,
     setStreaming,
     setMessageStreaming,
   } = useChatStore()
+
+  // Ensure an assistant message exists, return its id
+  const ensureAssistantMsg = useCallback(() => {
+    if (!currentMsgIdRef.current) {
+      const id = makeId()
+      currentMsgIdRef.current = id
+      const msg: Message = {
+        id,
+        role: 'assistant',
+        content: '',
+        thinking: [],
+        toolCalls: [],
+        streaming: true,
+        timestamp: Date.now(),
+      }
+      addMessage(msg)
+      setStreaming(true)
+    }
+    return currentMsgIdRef.current
+  }, [addMessage, setStreaming])
 
   const connect = useCallback(() => {
     if (!sessionId) return
@@ -39,7 +60,6 @@ export function useHermesChat(sessionId: string | null) {
 
     ws.onopen = () => {
       setStatus('connected')
-      // Send a ping every 30s to keep the connection alive through idle periods
       if (pingTimer.current) clearInterval(pingTimer.current)
       pingTimer.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -59,55 +79,48 @@ export function useHermesChat(sessionId: string | null) {
           tool_call_id?: string
         }
 
-        if (data.type === 'token') {
-          if (!currentMsgIdRef.current) {
-            // Start a new assistant message
-            const id = makeId()
-            currentMsgIdRef.current = id
-            const msg: Message = {
-              id,
-              role: 'assistant',
-              content: '',
-              streaming: true,
-              timestamp: Date.now(),
-            }
-            addMessage(msg)
-            setStreaming(true)
-          }
-          appendToken(currentMsgIdRef.current, data.content ?? '')
+        if (data.type === 'thinking') {
+          // Pre-response internal monologue — accumulate into thinking block
+          const id = ensureAssistantMsg()
+          appendThinking(id, data.content ?? '')
+
+        } else if (data.type === 'token') {
+          const id = ensureAssistantMsg()
+          appendToken(id, data.content ?? '')
+
         } else if (data.type === 'tool_call') {
-          const msgId = currentMsgIdRef.current
-          if (msgId) {
-            addToolCall(msgId, {
-              id: data.tool_call_id ?? makeId(),
-              name: data.name ?? 'unknown',
-              input: data.input ?? {},
-            })
-          }
+          const id = ensureAssistantMsg()
+          addToolCall(id, {
+            id: data.tool_call_id ?? makeId(),
+            name: data.name ?? 'unknown',
+            input: data.input ?? {},
+            running: true,
+          })
+
         } else if (data.type === 'tool_result') {
-          // Best effort — find the last tool call without a result
           const msgId = currentMsgIdRef.current
           if (msgId) {
             const messages = useChatStore.getState().messages
             const msg = messages.find((m) => m.id === msgId)
-            const pending = msg?.toolCalls?.find((tc) => !tc.result)
+            const pending = msg?.toolCalls?.find((tc) => tc.running)
             if (pending) {
               updateToolResult(msgId, pending.id, data.content ?? '')
             }
           }
+
         } else if (data.type === 'done') {
           if (currentMsgIdRef.current) {
             setMessageStreaming(currentMsgIdRef.current, false)
           }
           currentMsgIdRef.current = null
           setStreaming(false)
+
         } else if (data.type === 'error') {
           if (currentMsgIdRef.current) {
             setMessageStreaming(currentMsgIdRef.current, false)
           }
           currentMsgIdRef.current = null
           setStreaming(false)
-          // Append error note to the last message or show inline
           addMessage({
             id: makeId(),
             role: 'assistant',
@@ -126,13 +139,14 @@ export function useHermesChat(sessionId: string | null) {
       setStatus('disconnected')
       wsRef.current = null
       if (pingTimer.current) clearInterval(pingTimer.current)
-      // Auto-reconnect after 3s
       reconnectTimer.current = setTimeout(connect, 3000)
     }
   }, [
     sessionId,
+    ensureAssistantMsg,
     addMessage,
     appendToken,
+    appendThinking,
     addToolCall,
     updateToolResult,
     setStreaming,
@@ -153,7 +167,6 @@ export function useHermesChat(sessionId: string | null) {
     (content: string, files: string[] = []) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
 
-      // Add user message to store immediately
       const userMsg: Message = {
         id: makeId(),
         role: 'user',
@@ -162,8 +175,6 @@ export function useHermesChat(sessionId: string | null) {
         timestamp: Date.now(),
       }
       addMessage(userMsg)
-
-      // Reset current assistant message tracker
       currentMsgIdRef.current = null
 
       wsRef.current.send(JSON.stringify({ content, files }))

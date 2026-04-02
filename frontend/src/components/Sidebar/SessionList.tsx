@@ -26,9 +26,7 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
           }))
         )
       )
-      .catch(() => {
-        // backend not reachable yet — use empty list
-      })
+      .catch(() => {})
   }, [setSessions])
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -37,12 +35,8 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
     try {
       await api.sessions.delete(id)
       removeSession(id)
-      if (activeSessionId === id) {
-        useChatStore.getState().clearMessages()
-      }
-    } catch {
-      // ignore
-    }
+      if (activeSessionId === id) useChatStore.getState().clearMessages()
+    } catch {}
   }
 
   return (
@@ -57,7 +51,7 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
         overflow: 'hidden',
       }}
     >
-      {/* New chat button */}
+      {/* New chat button — gold */}
       <div style={{ padding: '12px 12px 8px' }}>
         <button
           onClick={onNewChat}
@@ -67,25 +61,28 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
             alignItems: 'center',
             gap: 8,
             padding: '8px 12px',
-            background: 'var(--accent-cyan-glow)',
-            border: '1px solid var(--accent-cyan)',
+            background: 'var(--accent-gold-glow)',
+            border: '1px solid var(--accent-gold-dim)',
             borderRadius: 8,
-            color: 'var(--accent-cyan)',
+            color: 'var(--accent-gold)',
             fontWeight: 500,
-            fontSize: 14,
+            fontSize: 13,
+            fontFamily: "'Geist', sans-serif",
             cursor: 'pointer',
-            transition: 'background 0.15s',
+            transition: 'background 0.15s, border-color 0.15s',
           }}
           onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(0,212,170,0.25)'
+            const b = e.currentTarget as HTMLButtonElement
+            b.style.background = 'rgba(212,160,23,0.2)'
+            b.style.borderColor = 'var(--accent-gold)'
           }}
           onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background =
-              'var(--accent-cyan-glow)'
+            const b = e.currentTarget as HTMLButtonElement
+            b.style.background = 'var(--accent-gold-glow)'
+            b.style.borderColor = 'var(--accent-gold-dim)'
           }}
         >
-          <Plus size={16} />
+          <Plus size={15} />
           New Chat
         </button>
       </div>
@@ -93,15 +90,14 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
       {/* Session list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 12px' }}>
         {sessions.length === 0 && (
-          <p
-            style={{
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              padding: '12px 8px',
-              textAlign: 'center',
-            }}
-          >
-            No sessions yet
+          <p style={{
+            color: 'var(--text-muted)',
+            fontSize: 11,
+            padding: '12px 8px',
+            textAlign: 'center',
+            fontFamily: "'Geist Mono', monospace",
+          }}>
+            no sessions yet
           </p>
         )}
         {sessions.map((session) => {
@@ -117,31 +113,29 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '8px 10px',
+                padding: '7px 10px',
                 borderRadius: 6,
                 cursor: 'pointer',
-                background: isActive ? 'var(--accent-cyan-glow)' : 'transparent',
+                background: isActive ? 'var(--accent-gold-glow)' : 'transparent',
                 borderLeft: isActive
-                  ? '2px solid var(--accent-cyan)'
+                  ? '2px solid var(--accent-gold)'
                   : '2px solid transparent',
                 marginBottom: 2,
                 transition: 'background 0.1s',
               }}
               onMouseEnter={(e) => {
                 if (!isActive)
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    'var(--bg-hover)'
+                  (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover)'
               }}
               onMouseLeave={(e) => {
                 if (!isActive)
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    'transparent'
+                  (e.currentTarget as HTMLDivElement).style.background = 'transparent'
               }}
             >
               <span
                 style={{
                   flex: 1,
-                  fontSize: 13,
+                  fontSize: 12,
                   color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -152,6 +146,7 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
               </span>
               <button
                 onClick={(e) => handleDelete(e, session.id)}
+                className="delete-btn"
                 style={{
                   background: 'none',
                   border: 'none',
@@ -161,29 +156,24 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
                   display: 'flex',
                   alignItems: 'center',
                   opacity: 0,
-                  transition: 'opacity 0.1s',
+                  transition: 'opacity 0.1s, color 0.1s',
                 }}
                 onMouseEnter={(e) => {
-                  ;(e.currentTarget as HTMLButtonElement).style.color =
-                    'var(--status-error)'
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--status-error)'
                 }}
                 onMouseLeave={(e) => {
-                  ;(e.currentTarget as HTMLButtonElement).style.color =
-                    'var(--text-muted)'
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
                 }}
-                className="delete-btn"
                 title="Delete session"
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </button>
             </div>
           )
         })}
       </div>
 
-      <style>{`
-        div:hover .delete-btn { opacity: 1 !important; }
-      `}</style>
+      <style>{`div:hover .delete-btn { opacity: 1 !important; }`}</style>
     </aside>
   )
 }

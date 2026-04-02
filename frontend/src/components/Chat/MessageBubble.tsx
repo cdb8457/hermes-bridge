@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import type { Message } from '../../stores/chatStore'
 import { ToolCallCard } from './ToolCallCard'
+import { ThinkingBlock } from './ThinkingBlock'
 
 interface MessageBubbleProps {
   message: Message
@@ -16,11 +17,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         display: 'flex',
         flexDirection: 'column',
         alignItems: isUser ? 'flex-end' : 'flex-start',
-        marginBottom: 16,
+        marginBottom: 20,
         maxWidth: '100%',
       }}
     >
-      {/* Tool calls (shown before the message text for assistant messages) */}
+      {/* Thinking block — assistant only, above everything */}
+      {!isUser && message.thinking && message.thinking.length > 0 && (
+        <ThinkingBlock lines={message.thinking} />
+      )}
+
+      {/* Tool calls */}
       {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
         <div
           style={{
@@ -38,7 +44,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       )}
 
-      {/* File attachments */}
+      {/* File attachments (user messages) */}
       {isUser && message.files && message.files.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
           {message.files.map((f) => (
@@ -49,8 +55,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 border: '1px solid var(--border-bright)',
                 borderRadius: 4,
                 padding: '2px 8px',
-                fontSize: 12,
+                fontSize: 11,
                 color: 'var(--text-secondary)',
+                fontFamily: "'Geist Mono', monospace",
               }}
             >
               {f.split('/').pop() ?? f}
@@ -69,7 +76,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   border: '1px solid var(--border-bright)',
                   borderRadius: '12px 12px 4px 12px',
                   padding: '10px 14px',
-                  maxWidth: 680,
+                  maxWidth: 640,
                   color: 'var(--text-primary)',
                   fontSize: 14,
                   lineHeight: '1.6',
@@ -77,7 +84,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   wordBreak: 'break-word',
                 }
               : {
-                  borderLeft: '2px solid var(--accent-cyan)',
+                  borderLeft: '2px solid var(--accent-gold)',
                   paddingLeft: 16,
                   maxWidth: 680,
                   width: '100%',
@@ -97,9 +104,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 <span
                   style={{
                     display: 'inline-block',
-                    width: 8,
+                    width: 7,
                     height: 14,
-                    background: 'var(--accent-cyan)',
+                    background: 'var(--accent-gold)',
                     marginLeft: 2,
                     verticalAlign: 'text-bottom',
                     animation: 'blink 1s step-end infinite',
@@ -110,13 +117,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
         </div>
       )}
-
-      <style>{`
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `}</style>
     </div>
   )
 }

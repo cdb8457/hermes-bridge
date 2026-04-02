@@ -2,26 +2,43 @@
 @import 'tailwindcss';
 
 :root {
-  --bg-primary: #0d0d0d;
-  --bg-secondary: #141414;
-  --bg-elevated: #1a1a1a;
-  --bg-hover: #222222;
-  --border: #2a2a2a;
+  /* Backgrounds — pure black terminal aesthetic matching Hermes CLI */
+  --bg-primary:    #000000;
+  --bg-secondary:  #0d0d0d;
+  --bg-elevated:   #141414;
+  --bg-hover:      #1a1a1a;
+  --border:        #2a2a2a;
   --border-bright: #333333;
 
-  --accent-cyan: #00d4aa;
-  --accent-cyan-dim: #00a882;
-  --accent-cyan-glow: rgba(0, 212, 170, 0.15);
+  /* Gold/amber — Hermes primary accent (wordmark, active states, categories) */
+  --accent-gold:      #d4a017;
+  --accent-gold-dim:  #a37810;
+  --accent-gold-glow: rgba(212, 160, 23, 0.12);
+
+  /* Cyan — secondary accent (model name, send button, interactive elements) */
+  --accent-cyan:      #00d4aa;
+  --accent-cyan-dim:  #00a882;
+  --accent-cyan-glow: rgba(0, 212, 170, 0.12);
+
+  /* Tool calls */
   --accent-orange: #ff6b35;
   --accent-purple: #8b5cf6;
 
-  --text-primary: #e8e8e8;
+  /* Text — warmer off-white matching CLI output */
+  --text-primary:   #c8c8c8;
   --text-secondary: #888888;
-  --text-muted: #555555;
-  --text-code: #a8ff78;
+  --text-muted:     #555555;
+  --text-code:      #a8ff78;
 
+  /* Thinking / internal monologue */
+  --thinking-bg:     #0a0a0a;
+  --thinking-border: #2a2a2a;
+  --thinking-text:   #5a5a5a;
+  --thinking-label:  #d4a017;
+
+  /* Status */
   --status-success: #22c55e;
-  --status-error: #ef4444;
+  --status-error:   #ef4444;
 }
 
 * {
@@ -38,25 +55,14 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-bright);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* Code blocks */
-pre, code {
-  font-family: 'Geist Mono', ui-monospace, monospace;
-}
+/* Code */
+pre, code { font-family: 'Geist Mono', ui-monospace, monospace; }
 
 /* Markdown prose */
 .prose h1, .prose h2, .prose h3 {
@@ -75,6 +81,7 @@ pre, code {
   padding-left: 1.5rem;
   margin-bottom: 0.75rem;
 }
+.prose li { margin-bottom: 0.25rem; }
 .prose code {
   color: var(--text-code);
   background: var(--bg-elevated);
@@ -95,13 +102,39 @@ pre, code {
   padding: 0;
   color: var(--text-primary);
 }
-.prose a {
-  color: var(--accent-cyan);
-  text-decoration: underline;
-}
+.prose a { color: var(--accent-cyan); text-decoration: underline; }
 .prose blockquote {
   border-left: 3px solid var(--border-bright);
   padding-left: 1rem;
   color: var(--text-secondary);
   margin: 0.75rem 0;
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  font-size: 0.9em;
+}
+.prose th {
+  color: var(--accent-gold);
+  border-bottom: 1px solid var(--border-bright);
+  padding: 6px 12px;
+  text-align: left;
+}
+.prose td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+/* Pulse animation for running tool calls */
+@keyframes pulse-orange {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Blink cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
