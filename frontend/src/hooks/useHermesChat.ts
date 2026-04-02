@@ -16,6 +16,7 @@ export function useHermesChat(sessionId: string | null) {
   const wsRef = useRef<WebSocket | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('disconnected')
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentMsgIdRef = useRef<string | null>(null)
 
   const {
@@ -36,7 +37,16 @@ export function useHermesChat(sessionId: string | null) {
     const ws = new WebSocket(url)
     wsRef.current = ws
 
-    ws.onopen = () => setStatus('connected')
+    ws.onopen = () => {
+      setStatus('connected')
+      // Send a ping every 30s to keep the connection alive through idle periods
+      if (pingTimer.current) clearInterval(pingTimer.current)
+      pingTimer.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }))
+        }
+      }, 30000)
+    }
 
     ws.onmessage = (event) => {
       try {
@@ -115,6 +125,7 @@ export function useHermesChat(sessionId: string | null) {
     ws.onclose = () => {
       setStatus('disconnected')
       wsRef.current = null
+      if (pingTimer.current) clearInterval(pingTimer.current)
       // Auto-reconnect after 3s
       reconnectTimer.current = setTimeout(connect, 3000)
     }
@@ -132,6 +143,7 @@ export function useHermesChat(sessionId: string | null) {
     connect()
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+      if (pingTimer.current) clearInterval(pingTimer.current)
       wsRef.current?.close()
       wsRef.current = null
     }

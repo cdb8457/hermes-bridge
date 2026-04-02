@@ -76,6 +76,11 @@ async def websocket_chat(websocket: WebSocket, frontend_session_id: str):
         while True:
             raw = await websocket.receive_text()
             payload = json.loads(raw)
+
+            # Ignore keepalive pings from the frontend
+            if payload.get("type") == "ping":
+                continue
+
             message: str = payload.get("content", "")
             files: list[str] = payload.get("files", [])
 
