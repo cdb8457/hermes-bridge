@@ -162,7 +162,7 @@ export function InputBar({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message Hermes... (WhisperFlow works here)"
+          placeholder="Message Hermes..."
           autoFocus
           disabled={disabled}
           rows={1}
