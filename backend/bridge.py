@@ -354,6 +354,123 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 # ---------------------------------------------------------------------------
+# Cron jobs
+# ---------------------------------------------------------------------------
+
+def parse_cron_list(output: str) -> list[dict]:
+    """Parse `hermes cron list` output into structured job dicts."""
+    jobs = []
+    current: dict = {}
+    for line in output.splitlines():
+        line = line.strip()
+        if not line or line.startswith("─") or line.startswith("No cron"):
+            if current:
+                jobs.append(current)
+                current = {}
+            continue
+        # Try key: value patterns
+        m = re.match(r"^(ID|Prompt|Schedule|Status|Last Run|Last Status)[:\s]+(.+)$", line, re.IGNORECASE)
+        if m:
+            key, val = m.group(1).lower().replace(" ", "_"), m.group(2).strip()
+            current[key] = val
+        elif line and not current.get("id"):
+            # First non-blank line might be the job ID
+            current["id"] = line
+    if current:
+        jobs.append(current)
+
+    result = []
+    for j in jobs:
+        if not j.get("id"):
+            continue
+        result.append({
+            "id": j.get("id", ""),
+            "prompt": j.get("prompt", j.get("id", "")),
+            "schedule": j.get("schedule", ""),
+            "schedule_human": j.get("schedule", ""),
+            "active": j.get("status", "active").lower() != "paused",
+            "last_run": j.get("last_run"),
+            "last_status": j.get("last_status", "success").lower()
+                if j.get("last_run") else None,
+        })
+    return result
+
+
+@app.get("/cron")
+async def list_cron():
+    proc = await asyncio.create_subprocess_exec(
+        "hermes", "cron", "list",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    return parse_cron_list(stdout.decode(errors="replace"))
+
+
+@app.post("/cron")
+async def create_cron(body: dict):
+    prompt: str = body.get("prompt", "")
+    schedule: str = body.get("schedule", "0 9 * * *")
+    if not prompt:
+        return {"error": "prompt required"}, 400
+
+    proc = await asyncio.create_subprocess_exec(
+        "hermes", "cron", "add", prompt, "--schedule", schedule,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    output = stdout.decode(errors="replace")
+
+    # Extract job ID from output if available
+    m = re.search(r"(?:id|job)[:\s]+(\S+)", output, re.IGNORECASE)
+    job_id = m.group(1) if m else f"job_{int(time.time())}"
+
+    return {
+        "id": job_id,
+        "prompt": prompt,
+        "schedule": schedule,
+        "schedule_human": schedule,
+        "active": True,
+        "last_run": None,
+        "last_status": None,
+    }
+
+
+@app.delete("/cron/{job_id}")
+async def delete_cron(job_id: str):
+    proc = await asyncio.create_subprocess_exec(
+        "hermes", "cron", "delete", job_id,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate()
+    return {"ok": True}
+
+
+@app.post("/cron/{job_id}/pause")
+async def pause_cron(job_id: str):
+    proc = await asyncio.create_subprocess_exec(
+        "hermes", "cron", "pause", job_id,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate()
+    return {"ok": True}
+
+
+@app.post("/cron/{job_id}/resume")
+async def resume_cron(job_id: str):
+    proc = await asyncio.create_subprocess_exec(
+        "hermes", "cron", "resume", job_id,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

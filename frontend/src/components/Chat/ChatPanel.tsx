@@ -10,9 +10,21 @@ interface ChatPanelProps {
   sessionId: string | null
   onConnectionChange?: (connected: boolean) => void
   onFirstMessage?: (text: string) => void
+  onBranch?: (messageIndex: number) => void
+  voiceEnabled?: boolean
+  speak?: (text: string) => void
+  readingMessageId?: string | null
 }
 
-export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: ChatPanelProps) {
+export function ChatPanel({
+  sessionId,
+  onConnectionChange,
+  onFirstMessage,
+  onBranch,
+  voiceEnabled = false,
+  speak,
+  readingMessageId,
+}: ChatPanelProps) {
   const messages = useChatStore((s) => s.messages)
   const isStreaming = useChatStore((s) => s.isStreaming)
   const pendingFilePaths = useChatStore((s) => s.pendingFiles)
@@ -24,21 +36,31 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadedMeta = useRef<Map<string, { name: string; previewUrl?: string }>>(new Map())
 
-  // Track uploaded file metadata for previews
-  const uploadedMeta = useRef<Map<string, { name: string; previewUrl?: string }>>(
-    new Map()
-  )
+  // Track which messages have already been spoken to avoid re-speaking
+  const spokenIds = useRef<Set<string>>(new Set())
 
-  // Notify parent of connection status changes
   useEffect(() => {
     onConnectionChange?.(status === 'connected')
   }, [status, onConnectionChange])
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Speak completed assistant messages
+  useEffect(() => {
+    if (!voiceEnabled || !speak) return
+    const last = messages[messages.length - 1]
+    if (!last) return
+    if (last.role !== 'assistant') return
+    if (last.streaming) return
+    if (spokenIds.current.has(last.id)) return
+    if (!last.content) return
+    spokenIds.current.add(last.id)
+    speak(last.content)
+  }, [messages, voiceEnabled, speak])
 
   const handleSend = useCallback(
     (text: string, files: string[]) => {
@@ -48,7 +70,6 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
       }
       sendMessage(text, files)
       clearPendingFiles()
-      // Clean up preview URLs
       uploadedMeta.current.clear()
     },
     [sendMessage, clearPendingFiles, messages.length, onFirstMessage]
@@ -85,7 +106,7 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
 
   return (
     <FileDropZone onFileDrop={handleFileDrop}>
-      {/* Messages area */}
+      {/* Messages */}
       <div
         style={{
           flex: 1,
@@ -93,9 +114,6 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
           padding: '24px 24px 0',
           display: 'flex',
           flexDirection: 'column',
-        }}
-        onClick={() => {
-          // Re-focus input on click anywhere in chat (helps WhisperFlow)
         }}
       >
         {messages.length === 0 && (
@@ -110,13 +128,13 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
               color: 'var(--text-muted)',
             }}
           >
-            <div style={{ fontSize: 48 }}>⚡</div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 40 }}>⚕</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent-gold)', fontFamily: "'Geist Mono', monospace" }}>
               Hermes Bridge
             </div>
-            <div style={{ fontSize: 14 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               {status === 'connected'
-                ? 'Connected — start typing or use WhisperFlow'
+                ? 'Connected — ready'
                 : status === 'connecting'
                 ? 'Connecting to Hermes…'
                 : 'Disconnected — retrying…'}
@@ -124,14 +142,20 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+        {messages.map((msg, index) => (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            messageIndex={index}
+            onBranch={onBranch}
+            isReading={readingMessageId === msg.id}
+          />
         ))}
 
         <div ref={bottomRef} style={{ height: 24 }} />
       </div>
 
-      {/* Input area */}
+      {/* Input */}
       <InputBar
         onSend={handleSend}
         disabled={isStreaming}
@@ -140,7 +164,6 @@ export function ChatPanel({ sessionId, onConnectionChange, onFirstMessage }: Cha
         onAttachFile={handleAttachClick}
       />
 
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"

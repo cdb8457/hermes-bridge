@@ -23,6 +23,16 @@ export interface UploadResult {
   url: string
 }
 
+export interface CronJob {
+  id: string
+  prompt: string
+  schedule: string
+  schedule_human: string
+  active: boolean
+  last_run?: string
+  last_status?: 'success' | 'failed'
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init)
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -43,5 +53,21 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return req<UploadResult>('/api/upload', { method: 'POST', body: form })
+  },
+
+  cron: {
+    list: () => req<CronJob[]>('/api/cron'),
+    create: (prompt: string, schedule: string) =>
+      req<CronJob>('/api/cron', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, schedule }),
+      }),
+    delete: (id: string) =>
+      req<void>(`/api/cron/${id}`, { method: 'DELETE' }),
+    pause: (id: string) =>
+      req<void>(`/api/cron/${id}/pause`, { method: 'POST' }),
+    resume: (id: string) =>
+      req<void>(`/api/cron/${id}/resume`, { method: 'POST' }),
   },
 }

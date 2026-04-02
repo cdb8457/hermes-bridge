@@ -1,11 +1,22 @@
-import { Settings } from 'lucide-react'
+import { Settings, Volume2, VolumeX, Clock } from 'lucide-react'
 
 interface HeaderProps {
   connected: boolean
   model?: string
+  voiceEnabled?: boolean
+  onVoiceToggle?: () => void
+  onCronToggle?: () => void
+  cronOpen?: boolean
 }
 
-export function Header({ connected, model = 'hermes' }: HeaderProps) {
+export function Header({
+  connected,
+  model = 'hermes',
+  voiceEnabled = false,
+  onVoiceToggle,
+  onCronToggle,
+  cronOpen = false,
+}: HeaderProps) {
   return (
     <header
       style={{
@@ -19,7 +30,7 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
         flexShrink: 0,
       }}
     >
-      {/* Left: wordmark — gold, matching CLI */}
+      {/* Left: wordmark */}
       <span
         style={{
           color: 'var(--accent-gold)',
@@ -32,7 +43,7 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
         ⚕ Hermes Bridge
       </span>
 
-      {/* Center: model name — cyan, matching CLI status bar */}
+      {/* Center: model name */}
       <span
         style={{
           flex: 1,
@@ -46,9 +57,65 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
         {model}
       </span>
 
-      {/* Right: status dot + settings */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {/* Right: controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+        {/* Voice toggle */}
+        <button
+          onClick={onVoiceToggle}
+          title={voiceEnabled ? 'Voice on — click to mute' : 'Voice off — click to enable'}
+          style={{
+            background: voiceEnabled ? 'var(--accent-gold-glow)' : 'none',
+            border: voiceEnabled ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: voiceEnabled ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!voiceEnabled)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            if (!voiceEnabled)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
+        >
+          {voiceEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+        </button>
+
+        {/* Cron panel toggle */}
+        <button
+          onClick={onCronToggle}
+          title="Scheduled tasks"
+          style={{
+            background: cronOpen ? 'var(--accent-gold-glow)' : 'none',
+            border: cronOpen ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: cronOpen ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!cronOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            if (!cronOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
+        >
+          <Clock size={15} />
+        </button>
+
+        {/* Connection status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
           <div
             style={{
               width: 7,
@@ -62,6 +129,8 @@ export function Header({ connected, model = 'hermes' }: HeaderProps) {
             {connected ? 'connected' : 'disconnected'}
           </span>
         </div>
+
+        {/* Settings */}
         <button
           style={{
             background: 'none',

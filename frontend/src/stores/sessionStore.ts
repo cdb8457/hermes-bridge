@@ -5,6 +5,8 @@ export interface Session {
   title: string
   createdAt: number
   updatedAt: number
+  parentId?: string      // ID of session this was branched from
+  branchPoint?: number   // message index where branch occurred
 }
 
 interface SessionState {
@@ -30,7 +32,7 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   removeSession: (id) =>
     set((s) => ({
-      sessions: s.sessions.filter((s) => s.id !== id),
+      sessions: s.sessions.filter((sess) => sess.id !== id),
       activeSessionId: s.activeSessionId === id ? null : s.activeSessionId,
     })),
 

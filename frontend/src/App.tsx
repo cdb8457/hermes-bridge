@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react'
 import { Header } from './components/Header/Header'
 import { SessionList } from './components/Sidebar/SessionList'
+import { CronPanel } from './components/Sidebar/CronPanel'
 import { ChatPanel } from './components/Chat/ChatPanel'
 import { useChatStore } from './stores/chatStore'
 import { useSessionStore } from './stores/sessionStore'
+import { useVoiceOutput } from './hooks/useVoiceOutput'
 import { api } from './lib/api'
 
 function makeSessionId() {
@@ -13,10 +15,14 @@ function makeSessionId() {
 export default function App() {
   const [sessionId, setSessionId] = useState<string>(() => makeSessionId())
   const [connected, setConnected] = useState(false)
+  const [cronOpen, setCronOpen] = useState(false)
+  const [readingMessageId] = useState<string | null>(null)
 
   const clearMessages = useChatStore((s) => s.clearMessages)
   const loadMessages = useChatStore((s) => s.loadMessages)
+  const messages = useChatStore((s) => s.messages)
   const { addSession, updateSession, setActiveSession } = useSessionStore()
+  const { enabled: voiceEnabled, speak, toggle: toggleVoice } = useVoiceOutput()
 
   const handleNewChat = useCallback(() => {
     const newId = makeSessionId()
@@ -39,39 +45,57 @@ export default function App() {
             timestamp: m.timestamp ?? Date.now(),
           }))
         )
-      } catch {
-        // Session history unavailable
-      }
+      } catch {}
     },
     [clearMessages, loadMessages]
   )
 
   const handleFirstMessage = useCallback(
     (title: string) => {
-      addSession({
-        id: sessionId,
-        title,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
+      addSession({ id: sessionId, title, createdAt: Date.now(), updatedAt: Date.now() })
       setActiveSession(sessionId)
       updateSession(sessionId, { title })
     },
     [sessionId, addSession, setActiveSession, updateSession]
   )
 
+  // Session branching — fork at a message index
+  const handleBranch = useCallback(
+    (messageIndex: number) => {
+      const branchMessages = messages.slice(0, messageIndex + 1)
+      const original = useSessionStore.getState().sessions.find(
+        (s) => s.id === useSessionStore.getState().activeSessionId
+      )
+      const branchTitle = `Branch of ${original?.title ?? 'chat'}`
+      const newId = makeSessionId()
+
+      // Add branched session to sidebar
+      addSession({
+        id: newId,
+        title: branchTitle,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        parentId: sessionId,
+        branchPoint: messageIndex,
+      })
+
+      // Switch to new session with copied messages
+      setSessionId(newId)
+      setActiveSession(newId)
+      loadMessages(branchMessages.map((m) => ({ ...m })))
+    },
+    [messages, sessionId, addSession, setActiveSession, loadMessages]
+  )
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: 'var(--bg-primary)',
-        color: 'var(--text-primary)',
-        overflow: 'hidden',
-      }}
-    >
-      <Header connected={connected} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)', overflow: 'hidden' }}>
+      <Header
+        connected={connected}
+        voiceEnabled={voiceEnabled}
+        onVoiceToggle={toggleVoice}
+        onCronToggle={() => setCronOpen((v) => !v)}
+        cronOpen={cronOpen}
+      />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <SessionList
@@ -84,8 +108,16 @@ export default function App() {
             sessionId={sessionId}
             onConnectionChange={setConnected}
             onFirstMessage={handleFirstMessage}
+            onBranch={handleBranch}
+            voiceEnabled={voiceEnabled}
+            speak={speak}
+            readingMessageId={readingMessageId}
           />
         </main>
+
+        {cronOpen && (
+          <CronPanel onClose={() => setCronOpen(false)} />
+        )}
       </div>
     </div>
   )
