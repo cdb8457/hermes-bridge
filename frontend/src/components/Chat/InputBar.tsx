@@ -156,15 +156,14 @@ export function InputBar({
           <Paperclip size={16} />
         </button>
 
-        {/* CRITICAL: native <textarea> for WhisperFlow compatibility */}
+        {/* CRITICAL: native <textarea> for WhisperFlow compatibility — never disabled so voice input always works */}
         <textarea
           ref={inputRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message Hermes..."
+          placeholder={disabled ? 'Hermes is thinking…' : 'Message Hermes...'}
           autoFocus
-          disabled={disabled}
           rows={1}
           style={{
             flex: 1,
