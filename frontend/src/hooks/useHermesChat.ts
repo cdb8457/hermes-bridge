@@ -19,6 +19,8 @@ export function useHermesChat(sessionId: string | null) {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentMsgIdRef = useRef<string | null>(null)
+  const thinkingFiredRef = useRef(false)   // only one thinking event per response
+  const thinkingLineCount = useRef(0)
 
   const {
     addMessage,
@@ -86,7 +88,15 @@ export function useHermesChat(sessionId: string | null) {
           // Pre-response internal monologue — accumulate into thinking block
           const id = ensureAssistantMsg()
           appendThinking(id, data.content ?? '')
-          pushEvent({ type: 'thinking', label: 'thinking', detail: data.content, timestamp: Date.now(), sessionId: sessionId ?? '' })
+          thinkingLineCount.current += 1
+          // Only fire one activity event per response; update its label with line count
+          if (!thinkingFiredRef.current) {
+            thinkingFiredRef.current = true
+            pushEvent({ type: 'thinking', label: 'thinking (1 line)', timestamp: Date.now(), sessionId: sessionId ?? '' })
+          } else {
+            // Update the most recent thinking event label in-place
+            useActivityStore.getState().updateLatestThinking(sessionId ?? '', thinkingLineCount.current)
+          }
 
         } else if (data.type === 'token') {
           const id = ensureAssistantMsg()
@@ -119,6 +129,8 @@ export function useHermesChat(sessionId: string | null) {
             setMessageStreaming(currentMsgIdRef.current, false)
           }
           currentMsgIdRef.current = null
+          thinkingFiredRef.current = false
+          thinkingLineCount.current = 0
           setStreaming(false)
           pushEvent({ type: 'response', label: 'Response complete', timestamp: Date.now(), sessionId: sessionId ?? '' })
 
@@ -127,6 +139,8 @@ export function useHermesChat(sessionId: string | null) {
             setMessageStreaming(currentMsgIdRef.current, false)
           }
           currentMsgIdRef.current = null
+          thinkingFiredRef.current = false
+          thinkingLineCount.current = 0
           setStreaming(false)
           addMessage({
             id: makeId(),

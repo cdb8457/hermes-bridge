@@ -19,6 +19,7 @@ export interface ActivityEvent {
 interface ActivityState {
   events: ActivityEvent[]
   pushEvent: (e: Omit<ActivityEvent, 'id'>) => void
+  updateLatestThinking: (sessionId: string, lineCount: number) => void
   clearSession: (sessionId: string) => void
   clearAll: () => void
 }
@@ -36,6 +37,17 @@ export const useActivityStore = create<ActivityState>((set) => ({
       }
       const next = [event, ...s.events]
       return { events: next.length > MAX_EVENTS ? next.slice(0, MAX_EVENTS) : next }
+    }),
+
+  updateLatestThinking: (sessionId, lineCount) =>
+    set((s) => {
+      const idx = s.events.findIndex(
+        (e) => e.sessionId === sessionId && e.type === 'thinking'
+      )
+      if (idx === -1) return s
+      const updated = [...s.events]
+      updated[idx] = { ...updated[idx], label: `thinking (${lineCount} lines)` }
+      return { events: updated }
     }),
 
   clearSession: (sessionId) =>
