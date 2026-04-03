@@ -477,7 +477,7 @@ async def resume_cron(job_id: str):
 # Honcho Memory endpoints
 # ---------------------------------------------------------------------------
 
-HONCHO_BASE      = os.getenv("HONCHO_BASE_URL",  "http://192.168.1.31:8686")
+HONCHO_BASE      = os.getenv("HONCHO_BASE_URL",  "http://192.168.1.31:8686/v3")
 HONCHO_WORKSPACE = os.getenv("HONCHO_WORKSPACE", "hermes")
 HONCHO_PEER      = os.getenv("HONCHO_PEER",      "admin")
 
