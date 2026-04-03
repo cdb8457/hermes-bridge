@@ -4,6 +4,7 @@ import { SessionList } from './components/Sidebar/SessionList'
 import { CronPanel } from './components/Sidebar/CronPanel'
 import { ChatPanel } from './components/Chat/ChatPanel'
 import { MissionControl, type AgentStatus } from './components/Dashboard/MissionControl'
+import { MemoryPanel } from './components/Memory/MemoryPanel'
 import { useChatStore } from './stores/chatStore'
 import { useSessionStore } from './stores/sessionStore'
 import { useVoiceOutput } from './hooks/useVoiceOutput'
@@ -18,6 +19,7 @@ export default function App() {
   const [connected, setConnected] = useState(false)
   const [cronOpen, setCronOpen] = useState(false)
   const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const [readingMessageId] = useState<string | null>(null)
 
   const clearMessages = useChatStore((s) => s.clearMessages)
@@ -109,6 +111,8 @@ export default function App() {
         cronOpen={cronOpen}
         onDashboardToggle={() => setDashboardOpen((v) => !v)}
         dashboardOpen={dashboardOpen}
+        onMemoryToggle={() => setMemoryOpen((v) => !v)}
+        memoryOpen={memoryOpen}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -131,6 +135,10 @@ export default function App() {
 
         {cronOpen && (
           <CronPanel onClose={() => setCronOpen(false)} />
+        )}
+
+        {memoryOpen && (
+          <MemoryPanel onClose={() => setMemoryOpen(false)} />
         )}
 
         {dashboardOpen && (

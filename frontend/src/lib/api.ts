@@ -23,6 +23,24 @@ export interface UploadResult {
   url: string
 }
 
+export interface MemoryCard {
+  content?: string
+  [key: string]: unknown
+}
+
+export interface MemoryContext {
+  context?: string
+  content?: string
+  [key: string]: unknown
+}
+
+export interface MemorySession {
+  id: string
+  created_at?: string
+  updated_at?: string
+  [key: string]: unknown
+}
+
 export interface CronJob {
   id: string
   prompt: string
@@ -53,6 +71,12 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return req<UploadResult>('/api/upload', { method: 'POST', body: form })
+  },
+
+  memory: {
+    card: () => req<MemoryCard>('/api/memory/card'),
+    context: () => req<MemoryContext>('/api/memory/context'),
+    sessions: () => req<{ items?: MemorySession[] } | MemorySession[]>('/api/memory/sessions', { method: 'POST' }),
   },
 
   cron: {

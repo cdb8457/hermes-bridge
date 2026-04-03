@@ -1,4 +1,4 @@
-import { Settings, Volume2, VolumeX, Clock, LayoutDashboard } from 'lucide-react'
+import { Settings, Volume2, VolumeX, Clock, LayoutDashboard, Brain } from 'lucide-react'
 
 interface HeaderProps {
   connected: boolean
@@ -9,6 +9,8 @@ interface HeaderProps {
   cronOpen?: boolean
   onDashboardToggle?: () => void
   dashboardOpen?: boolean
+  onMemoryToggle?: () => void
+  memoryOpen?: boolean
 }
 
 export function Header({
@@ -20,6 +22,8 @@ export function Header({
   cronOpen = false,
   onDashboardToggle,
   dashboardOpen = false,
+  onMemoryToggle,
+  memoryOpen = false,
 }: HeaderProps) {
   return (
     <header
@@ -116,6 +120,33 @@ export function Header({
           }}
         >
           <Clock size={15} />
+        </button>
+
+        {/* Memory toggle */}
+        <button
+          onClick={onMemoryToggle}
+          title="Memory Viewer"
+          style={{
+            background: memoryOpen ? 'var(--accent-gold-glow)' : 'none',
+            border: memoryOpen ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: memoryOpen ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!memoryOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            if (!memoryOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
+        >
+          <Brain size={15} />
         </button>
 
         {/* Dashboard toggle */}

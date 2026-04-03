@@ -12,10 +12,13 @@ Phase 2: Full output parser — classifies every line from hermes stdout into:
 
 import asyncio
 import json
+import os
 import re
 import time
 from pathlib import Path
 from typing import Optional
+
+import httpx
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -468,6 +471,52 @@ async def resume_cron(job_id: str):
     )
     await proc.communicate()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Honcho Memory endpoints
+# ---------------------------------------------------------------------------
+
+HONCHO_BASE      = os.getenv("HONCHO_BASE_URL",  "http://192.168.1.31:8686")
+HONCHO_WORKSPACE = os.getenv("HONCHO_WORKSPACE", "hermes")
+HONCHO_PEER      = os.getenv("HONCHO_PEER",      "admin")
+
+
+@app.get("/memory/card")
+async def get_memory_card():
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{HONCHO_BASE}/workspaces/{HONCHO_WORKSPACE}/peers/{HONCHO_PEER}/card"
+            )
+            return r.json() if r.status_code == 200 else {"error": r.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/memory/context")
+async def get_memory_context():
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{HONCHO_BASE}/workspaces/{HONCHO_WORKSPACE}/peers/{HONCHO_PEER}/context"
+            )
+            return r.json() if r.status_code == 200 else {"error": r.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/memory/sessions")
+async def get_memory_sessions():
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"{HONCHO_BASE}/workspaces/{HONCHO_WORKSPACE}/peers/{HONCHO_PEER}/sessions",
+                json={}
+            )
+            return r.json() if r.status_code == 200 else {"error": r.text}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------
