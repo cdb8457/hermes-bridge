@@ -511,7 +511,7 @@ async def get_memory_sessions():
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
-                f"{HONCHO_BASE}/workspaces/{HONCHO_WORKSPACE}/peers/{HONCHO_PEER}/sessions",
+                f"{HONCHO_BASE}/workspaces/{HONCHO_WORKSPACE}/sessions/list",
                 json={}
             )
             return r.json() if r.status_code == 200 else {"error": r.text}
