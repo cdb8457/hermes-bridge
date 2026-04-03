@@ -13,6 +13,7 @@ interface InputBarProps {
   pendingFiles?: PendingFile[]
   onRemoveFile?: (path: string) => void
   onAttachFile?: () => void
+  onPasteFile?: (file: File) => void
 }
 
 export function InputBar({
@@ -21,6 +22,7 @@ export function InputBar({
   pendingFiles = [],
   onRemoveFile,
   onAttachFile,
+  onPasteFile,
 }: InputBarProps) {
   const [message, setMessage] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -38,6 +40,17 @@ export function InputBar({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onPasteFile) return
+    const items = Array.from(e.clipboardData.items)
+    const imageItem = items.find((item) => item.type.startsWith('image/'))
+    if (imageItem) {
+      e.preventDefault()
+      const file = imageItem.getAsFile()
+      if (file) onPasteFile(file)
     }
   }
 
@@ -162,6 +175,7 @@ export function InputBar({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={disabled ? 'Hermes is thinking…' : 'Message Hermes...'}
           autoFocus
           rows={1}

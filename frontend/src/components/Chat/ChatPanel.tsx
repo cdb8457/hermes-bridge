@@ -92,6 +92,19 @@ export function ChatPanel({
 
   const handleAttachClick = () => fileInputRef.current?.click()
 
+  const handlePasteFile = useCallback(
+    async (file: File) => {
+      const result = await uploadFile(file)
+      if (result) {
+        uploadedMeta.current.set(result.path, {
+          name: result.name,
+          previewUrl: result.previewUrl,
+        })
+      }
+    },
+    [uploadFile]
+  )
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (files.length > 0) await handleFileDrop(files)
@@ -162,6 +175,7 @@ export function ChatPanel({
         pendingFiles={pendingFilesWithMeta}
         onRemoveFile={removePendingFile}
         onAttachFile={handleAttachClick}
+        onPasteFile={handlePasteFile}
       />
 
       <input
