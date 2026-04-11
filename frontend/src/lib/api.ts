@@ -1,4 +1,24 @@
-const BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+// Runtime base URL: localStorage override → build-time env → same-origin
+const LS_KEY = 'hermes_api_base'
+
+function getBase(): string {
+  try {
+    return localStorage.getItem(LS_KEY) ?? import.meta.env.VITE_API_BASE_URL ?? ''
+  } catch {
+    return import.meta.env.VITE_API_BASE_URL ?? ''
+  }
+}
+
+export function setApiBase(url: string): void {
+  try {
+    if (url) localStorage.setItem(LS_KEY, url.replace(/\/$/, ''))
+    else localStorage.removeItem(LS_KEY)
+  } catch {}
+}
+
+export function getApiBase(): string {
+  return getBase()
+}
 
 export interface SessionSummary {
   id: string
@@ -51,8 +71,21 @@ export interface CronJob {
   last_status?: 'success' | 'failed'
 }
 
+export interface Skill {
+  name: string
+  description?: string
+  content?: string
+  path?: string
+}
+
+export interface AgentConfig {
+  model?: string
+  workspace?: string
+  [key: string]: unknown
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init)
+  const res = await fetch(`${getBase()}${path}`, init)
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json() as Promise<T>
 }
@@ -93,5 +126,26 @@ export const api = {
       req<void>(`/api/cron/${id}/pause`, { method: 'POST' }),
     resume: (id: string) =>
       req<void>(`/api/cron/${id}/resume`, { method: 'POST' }),
+  },
+
+  skills: {
+    list: () => req<Skill[]>('/api/skills'),
+    get: (name: string) => req<Skill>(`/api/skills/${encodeURIComponent(name)}`),
+    run: (name: string, args?: string) =>
+      req<{ output: string }>('/api/skills/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, args }),
+      }),
+  },
+
+  config: {
+    get: () => req<AgentConfig>('/api/config'),
+    set: (patch: Partial<AgentConfig>) =>
+      req<AgentConfig>('/api/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      }),
   },
 }

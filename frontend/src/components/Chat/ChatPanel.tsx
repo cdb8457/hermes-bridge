@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { Download } from 'lucide-react'
 import { useChatStore } from '../../stores/chatStore'
+import { useSessionStore } from '../../stores/sessionStore'
 import { useHermesChat } from '../../hooks/useHermesChat'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { MessageBubble } from './MessageBubble'
@@ -28,6 +30,7 @@ export function ChatPanel({
   const messages = useChatStore((s) => s.messages)
   const isStreaming = useChatStore((s) => s.isStreaming)
   const pendingFilePaths = useChatStore((s) => s.pendingFiles)
+  const activeSession = useSessionStore((s) => s.sessions.find((ss) => ss.id === sessionId))
   const clearPendingFiles = useChatStore((s) => s.clearPendingFiles)
   const removePendingFile = useChatStore((s) => s.removePendingFile)
 
@@ -105,6 +108,38 @@ export function ChatPanel({
     [uploadFile]
   )
 
+  const handleExport = useCallback((format: 'md' | 'json') => {
+    const title = activeSession?.title ?? 'hermes-chat'
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
+    const filename = `${slug}.${format}`
+
+    let content: string
+    if (format === 'json') {
+      content = JSON.stringify(
+        { session: activeSession, messages: messages.map(({ id: _, streaming: __, ...m }) => m) },
+        null, 2
+      )
+    } else {
+      content = `# ${title}\n\n` +
+        messages.map((m) => {
+          const who = m.role === 'user' ? '**You**' : '**Hermes**'
+          const ts = new Date(m.timestamp).toLocaleString()
+          const thinking = m.thinking?.length
+            ? `\n> *thinking (${m.thinking.length} lines)*\n`
+            : ''
+          return `${who} — ${ts}${thinking}\n\n${m.content}`
+        }).join('\n\n---\n\n')
+    }
+
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [messages, activeSession])
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (files.length > 0) await handleFileDrop(files)
@@ -119,6 +154,56 @@ export function ChatPanel({
 
   return (
     <FileDropZone onFileDrop={handleFileDrop}>
+      {/* Toolbar — only shown when there are messages */}
+      {messages.length > 0 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          padding: '6px 24px 0',
+          gap: 4,
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: "'Geist Mono', monospace", marginRight: 4 }}>
+            export
+          </span>
+          {(['md', 'json'] as const).map((fmt) => (
+            <button
+              key={fmt}
+              onClick={() => handleExport(fmt)}
+              title={`Download as .${fmt}`}
+              style={{
+                background: 'none',
+                border: '1px solid var(--border-bright)',
+                borderRadius: 4,
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '2px 7px',
+                fontSize: 10,
+                fontFamily: "'Geist Mono', monospace",
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                const b = e.currentTarget as HTMLButtonElement
+                b.style.color = 'var(--accent-cyan)'
+                b.style.borderColor = 'var(--accent-cyan-dim)'
+              }}
+              onMouseLeave={(e) => {
+                const b = e.currentTarget as HTMLButtonElement
+                b.style.color = 'var(--text-muted)'
+                b.style.borderColor = 'var(--border-bright)'
+              }}
+            >
+              <Download size={9} />
+              .{fmt}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Messages */}
       <div
         style={{

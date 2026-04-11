@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Send, Paperclip, X } from 'lucide-react'
 
 interface PendingFile {
@@ -26,6 +26,22 @@ export function InputBar({
 }: InputBarProps) {
   const [message, setMessage] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Listen for hermes:inject-input (fired by SkillsPanel "run" button)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail
+      setMessage(text)
+      setTimeout(() => {
+        inputRef.current?.focus()
+        // Move cursor to end
+        const el = inputRef.current
+        if (el) { el.selectionStart = el.selectionEnd = el.value.length }
+      }, 0)
+    }
+    window.addEventListener('hermes:inject-input', handler)
+    return () => window.removeEventListener('hermes:inject-input', handler)
+  }, [])
 
   const handleSend = () => {
     const trimmed = message.trim()

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -10,8 +10,12 @@ interface SessionListProps {
 }
 
 export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
-  const { sessions, activeSessionId, setSessions, removeSession, setActiveSession } =
+  const { sessions, activeSessionId, setSessions, removeSession, setActiveSession, updateSession } =
     useSessionStore()
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     api.sessions
@@ -28,6 +32,23 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
       )
       .catch(() => {})
   }, [setSessions])
+
+  const startRename = (e: React.MouseEvent, id: string, currentTitle: string) => {
+    e.stopPropagation()
+    setRenamingId(id)
+    setRenameValue(currentTitle || '')
+    setTimeout(() => { renameInputRef.current?.select() }, 0)
+  }
+
+  const commitRename = async (id: string) => {
+    const trimmed = renameValue.trim()
+    if (trimmed) updateSession(id, { title: trimmed })
+    setRenamingId(null)
+  }
+
+  const visibleSessions = search.trim()
+    ? sessions.filter((s) => (s.title || '').toLowerCase().includes(search.trim().toLowerCase()))
+    : sessions
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -51,8 +72,32 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
         overflow: 'hidden',
       }}
     >
+      {/* Search */}
+      <div style={{ padding: '10px 10px 4px' }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="search sessions…"
+          style={{
+            width: '100%',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 5,
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            fontFamily: "'Geist Mono', monospace",
+            padding: '4px 8px',
+            outline: 'none',
+            boxSizing: 'border-box',
+          }}
+          onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.borderColor = 'var(--border-bright)' }}
+          onBlur={(e) => { (e.currentTarget as HTMLInputElement).style.borderColor = 'var(--border)' }}
+        />
+      </div>
+
       {/* New chat button — gold */}
-      <div style={{ padding: '12px 12px 8px' }}>
+      <div style={{ padding: '6px 12px 8px' }}>
         <button
           onClick={onNewChat}
           style={{
@@ -89,18 +134,12 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
 
       {/* Session list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 12px' }}>
-        {sessions.length === 0 && (
-          <p style={{
-            color: 'var(--text-muted)',
-            fontSize: 11,
-            padding: '12px 8px',
-            textAlign: 'center',
-            fontFamily: "'Geist Mono', monospace",
-          }}>
-            no sessions yet
+        {visibleSessions.length === 0 && (
+          <p style={{ color: 'var(--text-muted)', fontSize: 11, padding: '12px 8px', textAlign: 'center', fontFamily: "'Geist Mono', monospace" }}>
+            {search.trim() ? 'no matches' : 'no sessions yet'}
           </p>
         )}
-        {sessions.map((session) => {
+        {visibleSessions.map((session) => {
           const isActive = session.id === activeSessionId
           return (
             <div
@@ -132,18 +171,48 @@ export function SessionList({ onNewChat, onSelectSession }: SessionListProps) {
                   (e.currentTarget as HTMLDivElement).style.background = 'transparent'
               }}
             >
-              <span
-                style={{
-                  flex: 1,
-                  fontSize: 12,
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {session.title || 'Untitled'}
-              </span>
+              {renamingId === session.id ? (
+                <input
+                  ref={renameInputRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => commitRename(session.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename(session.id)
+                    if (e.key === 'Escape') setRenamingId(null)
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--accent-gold-dim)',
+                    borderRadius: 4,
+                    color: 'var(--text-primary)',
+                    fontSize: 12,
+                    fontFamily: "'Geist', sans-serif",
+                    padding: '1px 5px',
+                    outline: 'none',
+                    minWidth: 0,
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 12,
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onDoubleClick={(e) => startRename(e, session.id, session.title)}
+                  title="Double-click to rename"
+                >
+                  {session.title || 'Untitled'}
+                </span>
+              )}
               <button
                 onClick={(e) => handleDelete(e, session.id)}
                 className="delete-btn"

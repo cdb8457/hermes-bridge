@@ -1,4 +1,4 @@
-import { Settings, Volume2, VolumeX, Clock, LayoutDashboard, Brain } from 'lucide-react'
+import { Settings, Volume2, VolumeX, Clock, LayoutDashboard, Brain, Zap } from 'lucide-react'
 
 interface HeaderProps {
   connected: boolean
@@ -11,6 +11,10 @@ interface HeaderProps {
   dashboardOpen?: boolean
   onMemoryToggle?: () => void
   memoryOpen?: boolean
+  onSkillsToggle?: () => void
+  skillsOpen?: boolean
+  onSettingsToggle?: () => void
+  settingsOpen?: boolean
 }
 
 export function Header({
@@ -24,6 +28,10 @@ export function Header({
   dashboardOpen = false,
   onMemoryToggle,
   memoryOpen = false,
+  onSkillsToggle,
+  skillsOpen = false,
+  onSettingsToggle,
+  settingsOpen = false,
 }: HeaderProps) {
   return (
     <header
@@ -192,25 +200,56 @@ export function Header({
           </span>
         </div>
 
-        {/* Settings */}
+        {/* Skills toggle */}
         <button
+          onClick={onSkillsToggle}
+          title="Skills"
           style={{
-            background: 'none',
-            border: 'none',
+            background: skillsOpen ? 'var(--accent-gold-glow)' : 'none',
+            border: skillsOpen ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
             cursor: 'pointer',
-            color: 'var(--text-muted)',
-            padding: 4,
+            color: skillsOpen ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
             display: 'flex',
             alignItems: 'center',
-            transition: 'color 0.15s',
+            transition: 'all 0.15s',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-gold)'
+            if (!skillsOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+            if (!skillsOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
           }}
+        >
+          <Zap size={15} />
+        </button>
+
+        {/* Settings toggle */}
+        <button
+          onClick={onSettingsToggle}
           title="Settings"
+          style={{
+            background: settingsOpen ? 'var(--accent-gold-glow)' : 'none',
+            border: settingsOpen ? '1px solid var(--accent-gold-dim)' : '1px solid transparent',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: settingsOpen ? 'var(--accent-gold)' : 'var(--text-muted)',
+            padding: '4px 6px',
+            display: 'flex',
+            alignItems: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!settingsOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            if (!settingsOpen)
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'
+          }}
         >
           <Settings size={15} />
         </button>

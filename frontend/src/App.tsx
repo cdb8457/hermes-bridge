@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Header } from './components/Header/Header'
 import { SessionList } from './components/Sidebar/SessionList'
 import { CronPanel } from './components/Sidebar/CronPanel'
 import { ChatPanel } from './components/Chat/ChatPanel'
 import { MissionControl, type AgentStatus } from './components/Dashboard/MissionControl'
 import { MemoryPanel } from './components/Memory/MemoryPanel'
+import { SkillsPanel } from './components/Skills/SkillsPanel'
+import { SettingsPanel } from './components/Settings/SettingsPanel'
+import { CommandPalette, type PaletteCommand } from './components/CommandPalette/CommandPalette'
 import { useChatStore } from './stores/chatStore'
 import { useSessionStore } from './stores/sessionStore'
 import { useVoiceOutput } from './hooks/useVoiceOutput'
@@ -20,6 +23,9 @@ export default function App() {
   const [cronOpen, setCronOpen] = useState(false)
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [readingMessageId] = useState<string | null>(null)
 
   const clearMessages = useChatStore((s) => s.clearMessages)
@@ -73,6 +79,81 @@ export default function App() {
     [sessionId, addSession, setActiveSession, updateSession]
   )
 
+  // Global Ctrl+K → open palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Listen for session select events from palette
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      handleSelectSession(id)
+    }
+    window.addEventListener('hermes:select-session', handler)
+    return () => window.removeEventListener('hermes:select-session', handler)
+  }, [handleSelectSession])
+
+  // Palette action commands
+  const paletteActions = useMemo((): PaletteCommand[] => [
+    {
+      id: 'action:new-chat',
+      label: 'New Chat',
+      description: 'Start a fresh conversation',
+      category: 'action',
+      icon: '✚',
+      action: handleNewChat,
+    },
+    {
+      id: 'nav:memory',
+      label: 'Toggle Memory Panel',
+      category: 'nav',
+      icon: '🧠',
+      action: () => setMemoryOpen((v) => !v),
+    },
+    {
+      id: 'nav:cron',
+      label: 'Toggle Scheduled Tasks',
+      category: 'nav',
+      icon: '⏰',
+      action: () => setCronOpen((v) => !v),
+    },
+    {
+      id: 'nav:skills',
+      label: 'Toggle Skills Panel',
+      category: 'nav',
+      icon: '⚡',
+      action: () => setSkillsOpen((v) => !v),
+    },
+    {
+      id: 'nav:dashboard',
+      label: 'Toggle Mission Control',
+      category: 'nav',
+      icon: '📊',
+      action: () => setDashboardOpen((v) => !v),
+    },
+    {
+      id: 'nav:settings',
+      label: 'Toggle Settings',
+      category: 'nav',
+      icon: '⚙',
+      action: () => setSettingsOpen((v) => !v),
+    },
+  ], [handleNewChat])
+
+  // Run a skill — inject /skill-name into the chat input area via a custom event
+  const handleRunSkill = useCallback((skillName: string) => {
+    window.dispatchEvent(new CustomEvent('hermes:inject-input', { detail: `/${skillName}` }))
+    setSkillsOpen(false)
+  }, [])
+
   // Session branching — fork at a message index
   const handleBranch = useCallback(
     (messageIndex: number) => {
@@ -103,6 +184,11 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)', overflow: 'hidden' }}>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        extraCommands={paletteActions}
+      />
       <Header
         connected={connected}
         voiceEnabled={voiceEnabled}
@@ -113,6 +199,10 @@ export default function App() {
         dashboardOpen={dashboardOpen}
         onMemoryToggle={() => setMemoryOpen((v) => !v)}
         memoryOpen={memoryOpen}
+        onSkillsToggle={() => setSkillsOpen((v) => !v)}
+        skillsOpen={skillsOpen}
+        onSettingsToggle={() => setSettingsOpen((v) => !v)}
+        settingsOpen={settingsOpen}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -146,6 +236,19 @@ export default function App() {
             onClose={() => setDashboardOpen(false)}
             sessionId={sessionId}
             agentStatus={agentStatus}
+          />
+        )}
+
+        {skillsOpen && (
+          <SkillsPanel
+            onClose={() => setSkillsOpen(false)}
+            onRunSkill={handleRunSkill}
+          />
+        )}
+
+        {settingsOpen && (
+          <SettingsPanel
+            onClose={() => setSettingsOpen(false)}
           />
         )}
       </div>
