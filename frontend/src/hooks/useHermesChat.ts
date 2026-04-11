@@ -1,26 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore, type Message } from '../stores/chatStore'
 import { useActivityStore } from '../stores/activityStore'
+import { getApiBase } from '../lib/api'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
-
-const WS_BASE =
-  import.meta.env.VITE_WS_BASE_URL ??
-  (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
-    window.location.host
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
 export function useHermesChat(sessionId: string | null) {
-  const wsRef = useRef<WebSocket | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('disconnected')
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const currentMsgIdRef = useRef<string | null>(null)
-  const thinkingFiredRef = useRef(false)   // only one thinking event per response
-  const thinkingLineCount = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   const {
     addMessage,
@@ -34,175 +25,225 @@ export function useHermesChat(sessionId: string | null) {
 
   const pushEvent = useActivityStore((s) => s.pushEvent)
 
-  // Ensure an assistant message exists, return its id
-  const ensureAssistantMsg = useCallback(() => {
-    if (!currentMsgIdRef.current) {
-      const id = makeId()
-      currentMsgIdRef.current = id
-      const msg: Message = {
-        id,
-        role: 'assistant',
-        content: '',
-        thinking: [],
-        toolCalls: [],
-        streaming: true,
-        timestamp: Date.now(),
-      }
-      addMessage(msg)
-      setStreaming(true)
-    }
-    return currentMsgIdRef.current
-  }, [addMessage, setStreaming])
-
-  const connect = useCallback(() => {
-    if (!sessionId) return
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
-
-    setStatus('connecting')
-    const url = `${WS_BASE}/ws/chat/${sessionId}`
-    const ws = new WebSocket(url)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      setStatus('connected')
-      if (pingTimer.current) clearInterval(pingTimer.current)
-      pingTimer.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }))
-        }
-      }, 30000)
-    }
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data as string) as {
-          type: string
-          content?: string
-          name?: string
-          input?: Record<string, unknown>
-          message?: string
-          tool_call_id?: string
-        }
-
-        if (data.type === 'thinking') {
-          // Pre-response internal monologue — accumulate into thinking block
-          const id = ensureAssistantMsg()
-          appendThinking(id, data.content ?? '')
-          thinkingLineCount.current += 1
-          // Only fire one activity event per response; update its label with line count
-          if (!thinkingFiredRef.current) {
-            thinkingFiredRef.current = true
-            pushEvent({ type: 'thinking', label: 'thinking (1 line)', timestamp: Date.now(), sessionId: sessionId ?? '' })
-          } else {
-            // Update the most recent thinking event label in-place
-            useActivityStore.getState().updateLatestThinking(sessionId ?? '', thinkingLineCount.current)
-          }
-
-        } else if (data.type === 'token') {
-          const id = ensureAssistantMsg()
-          appendToken(id, data.content ?? '')
-
-        } else if (data.type === 'tool_call') {
-          const id = ensureAssistantMsg()
-          addToolCall(id, {
-            id: data.tool_call_id ?? makeId(),
-            name: data.name ?? 'unknown',
-            input: data.input ?? {},
-            running: true,
-          })
-          pushEvent({ type: 'tool_call', label: data.name ?? 'unknown', detail: JSON.stringify(data.input ?? {}), timestamp: Date.now(), sessionId: sessionId ?? '' })
-
-        } else if (data.type === 'tool_result') {
-          const msgId = currentMsgIdRef.current
-          if (msgId) {
-            const messages = useChatStore.getState().messages
-            const msg = messages.find((m) => m.id === msgId)
-            const pending = msg?.toolCalls?.find((tc) => tc.running)
-            if (pending) {
-              updateToolResult(msgId, pending.id, data.content ?? '')
-              pushEvent({ type: 'tool_result', label: `${pending.name} result`, timestamp: Date.now(), sessionId: sessionId ?? '' })
-            }
-          }
-
-        } else if (data.type === 'done') {
-          if (currentMsgIdRef.current) {
-            setMessageStreaming(currentMsgIdRef.current, false)
-          }
-          currentMsgIdRef.current = null
-          thinkingFiredRef.current = false
-          thinkingLineCount.current = 0
-          setStreaming(false)
-          pushEvent({ type: 'response', label: 'Response complete', timestamp: Date.now(), sessionId: sessionId ?? '' })
-
-        } else if (data.type === 'error') {
-          if (currentMsgIdRef.current) {
-            setMessageStreaming(currentMsgIdRef.current, false)
-          }
-          currentMsgIdRef.current = null
-          thinkingFiredRef.current = false
-          thinkingLineCount.current = 0
-          setStreaming(false)
-          addMessage({
-            id: makeId(),
-            role: 'assistant',
-            content: `⚠ Error: ${data.message ?? 'Unknown error'}`,
-            timestamp: Date.now(),
-          })
-        }
-      } catch {
-        // malformed JSON — ignore
-      }
-    }
-
-    ws.onerror = () => setStatus('error')
-
-    ws.onclose = () => {
-      setStatus('disconnected')
-      wsRef.current = null
-      if (pingTimer.current) clearInterval(pingTimer.current)
-      reconnectTimer.current = setTimeout(connect, 3000)
-    }
-  }, [
-    sessionId,
-    ensureAssistantMsg,
-    addMessage,
-    appendToken,
-    appendThinking,
-    addToolCall,
-    updateToolResult,
-    setStreaming,
-    setMessageStreaming,
-    pushEvent,
-  ])
-
+  // Health poll — drives the connection indicator
   useEffect(() => {
-    connect()
-    return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
-      if (pingTimer.current) clearInterval(pingTimer.current)
-      wsRef.current?.close()
-      wsRef.current = null
+    let cancelled = false
+
+    const check = async () => {
+      try {
+        const res = await fetch(`${getApiBase()}/health`, {
+          signal: AbortSignal.timeout(5000),
+        })
+        if (!cancelled) setStatus(res.ok ? 'connected' : 'error')
+      } catch {
+        if (!cancelled) setStatus('disconnected')
+      }
     }
-  }, [connect])
+
+    check()
+    const timer = setInterval(check, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
 
   const sendMessage = useCallback(
-    (content: string, files: string[] = []) => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+    async (content: string, files: string[] = []) => {
+      if (!sessionId) return
 
-      const userMsg: Message = {
+      // Cancel any in-flight SSE request
+      abortRef.current?.abort()
+      const abort = new AbortController()
+      abortRef.current = abort
+
+      // User message into store
+      addMessage({
         id: makeId(),
         role: 'user',
         content,
         files,
         timestamp: Date.now(),
-      }
-      addMessage(userMsg)
-      currentMsgIdRef.current = null
-      pushEvent({ type: 'user_message', label: content.slice(0, 60) + (content.length > 60 ? '…' : ''), timestamp: Date.now(), sessionId: sessionId ?? '' })
+      } satisfies Message)
 
-      wsRef.current.send(JSON.stringify({ content, files }))
+      pushEvent({
+        type: 'user_message',
+        label: content.slice(0, 60) + (content.length > 60 ? '…' : ''),
+        timestamp: Date.now(),
+        sessionId,
+      })
+
+      // Per-turn tracking (local to this call — no refs needed)
+      let msgId: string | null = null
+      const toolQueue = new Map<string, string[]>() // tool_name → [internal IDs]
+      let thinkingFired = false
+      let thinkingCount = 0
+
+      setStreaming(true)
+      setStatus('connecting')
+
+      const processEvent = (eventName: string, data: Record<string, unknown>) => {
+        switch (eventName) {
+          // ── Assistant message created ────────────────────────────────────
+          case 'message.started': {
+            msgId = makeId()
+            addMessage({
+              id: msgId,
+              role: 'assistant',
+              content: '',
+              thinking: [],
+              toolCalls: [],
+              streaming: true,
+              timestamp: Date.now(),
+            })
+            break
+          }
+
+          // ── Streaming text token ─────────────────────────────────────────
+          case 'assistant.delta': {
+            if (msgId) appendToken(msgId, (data.delta as string) ?? '')
+            break
+          }
+
+          // ── Internal thinking (_thinking tool) ──────────────────────────
+          case 'tool.progress': {
+            if (!msgId) break
+            appendThinking(msgId, (data.delta as string) ?? '')
+            thinkingCount++
+            if (!thinkingFired) {
+              thinkingFired = true
+              pushEvent({ type: 'thinking', label: 'thinking (1 line)', timestamp: Date.now(), sessionId })
+            } else {
+              useActivityStore.getState().updateLatestThinking(sessionId, thinkingCount)
+            }
+            break
+          }
+
+          // ── Tool call started ────────────────────────────────────────────
+          case 'tool.started': {
+            if (!msgId) break
+            const tcId = makeId()
+            const name = (data.tool_name as string) ?? 'unknown'
+            addToolCall(msgId, {
+              id: tcId,
+              name,
+              input: (data.args as Record<string, unknown>) ?? {},
+              running: true,
+            })
+            if (!toolQueue.has(name)) toolQueue.set(name, [])
+            toolQueue.get(name)!.push(tcId)
+            pushEvent({ type: 'tool_call', label: name, timestamp: Date.now(), sessionId })
+            break
+          }
+
+          // ── Tool call finished ───────────────────────────────────────────
+          case 'tool.completed': {
+            if (!msgId) break
+            const name = (data.tool_name as string) ?? 'unknown'
+            const tcId = toolQueue.get(name)?.shift()
+            if (tcId) {
+              updateToolResult(msgId, tcId, (data.result_preview as string) ?? '')
+              pushEvent({ type: 'tool_result', label: `${name} result`, timestamp: Date.now(), sessionId })
+            }
+            break
+          }
+
+          // ── Full content available (fallback if delta wasn't streamed) ───
+          case 'assistant.completed': {
+            if (msgId && data.content) {
+              const existing = useChatStore.getState().messages.find((m) => m.id === msgId)?.content ?? ''
+              if (!existing) appendToken(msgId, data.content as string)
+            }
+            break
+          }
+
+          // ── Stream finished ──────────────────────────────────────────────
+          case 'done': {
+            if (msgId) setMessageStreaming(msgId, false)
+            setStreaming(false)
+            pushEvent({ type: 'response', label: 'Response complete', timestamp: Date.now(), sessionId })
+            break
+          }
+        }
+      }
+
+      try {
+        const res = await fetch(
+          `${getApiBase()}/api/sessions/${sessionId}/chat/stream`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: content }),
+            signal: abort.signal,
+          }
+        )
+
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
+        if (!res.body) throw new Error('No response body')
+
+        setStatus('connected')
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buf += decoder.decode(value, { stream: true })
+
+          // SSE blocks are separated by double newline
+          const blocks = buf.split('\n\n')
+          buf = blocks.pop() ?? ''
+
+          for (const block of blocks) {
+            if (!block.trim()) continue
+
+            let eventName = 'message'
+            let dataStr = ''
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event: ')) eventName = line.slice(7).trim()
+              else if (line.startsWith('data: ')) dataStr = line.slice(6)
+            }
+
+            if (!dataStr || dataStr === '[DONE]') continue
+
+            try {
+              processEvent(eventName, JSON.parse(dataStr) as Record<string, unknown>)
+            } catch {
+              // ignore malformed JSON frames
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+
+        if (msgId) setMessageStreaming(msgId, false)
+        addMessage({
+          id: makeId(),
+          role: 'assistant',
+          content: `⚠ Error: ${(err as Error).message ?? 'Connection failed'}`,
+          timestamp: Date.now(),
+        })
+        setStatus('error')
+        setTimeout(() => setStatus('connected'), 3000)
+      } finally {
+        if (msgId) setMessageStreaming(msgId, false)
+        setStreaming(false)
+      }
     },
-    [addMessage]
+    [
+      sessionId,
+      addMessage,
+      appendToken,
+      appendThinking,
+      addToolCall,
+      updateToolResult,
+      setStreaming,
+      setMessageStreaming,
+      pushEvent,
+    ]
   )
 
   return { status, sendMessage }

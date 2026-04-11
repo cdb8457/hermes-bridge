@@ -91,7 +91,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => req<{ status: string }>('/api/health'),
+  health: () => req<{ status: string }>('/health'),
 
   sessions: {
     list: () => req<SessionSummary[]>('/api/sessions'),
